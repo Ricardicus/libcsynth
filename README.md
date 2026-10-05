@@ -97,8 +97,3 @@ The package carries the include paths and math dependency for you.
 - `examples/`: the WAV renderer.
 - `tests/`: engine, FM, envelopes, effects, and preset tests.
 - `cmake/`: installed-package configuration.
-
-This folder builds on its own and doesn't refer to its parent directory. The
-keyboard window and its SDL adapter live outside it. To split this into a new
-repository later, copy this folder's contents, including `.gitignore`.
-Saved settings in `presets/user/` are ignored by Git and aren't shipped.
