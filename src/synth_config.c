@@ -164,7 +164,7 @@ bool synthFilterConfigValid(const SynthFilterConfig *c)
 bool synthEffectsConfigValid(const SynthEffectsConfig *c)
 {
     return c && isfinite(c->echoMix) && c->echoMix >= 0 && c->echoMix <= 1 &&
-        isfinite(c->echoDelayMs) && c->echoDelayMs >= 1 && c->echoDelayMs <= 2000 &&
+        isfinite(c->echoDelayMs) && c->echoDelayMs >= 1 && c->echoDelayMs <= CSYNTH_ECHO_MAX_DELAY_MS &&
         isfinite(c->echoFeedback) && c->echoFeedback >= 0 && c->echoFeedback <= .95 &&
         isfinite(c->reverbMix) && c->reverbMix >= 0 && c->reverbMix <= 1 &&
         isfinite(c->reverbRoom) && c->reverbRoom >= 0 && c->reverbRoom <= .95 &&

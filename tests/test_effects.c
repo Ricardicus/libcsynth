@@ -42,6 +42,17 @@ int main(void)
         CHECK(isfinite(effectsNext(&e, i == 0 ? .5f : 0)));
     }
     effectsDestroy(&e);
+    config.effects.echoMix = 1; config.effects.echoFeedback = 0; config.effects.reverbMix = 0;
+    config.effects.echoDelayMs = CSYNTH_ECHO_MAX_DELAY_MS;
+    CHECK(effectsInit(&e, 1000, config.effects) == 0);
+    for (int i = 0; i <= CSYNTH_ECHO_MAX_DELAY_MS; ++i) {
+        double expected = i == 0 || i == CSYNTH_ECHO_MAX_DELAY_MS ? 1 : 0;
+        CHECK(fabs(effectsNext(&e, i == 0 ? 1 : 0) - expected) < 1e-6);
+    }
+    effectsDestroy(&e);
+    config.effects.echoDelayMs = CSYNTH_ECHO_MAX_DELAY_MS + 1;
+    CHECK(effectsInit(&e, 1000, config.effects) == -1);
+    config.effects.echoDelayMs = 10;
     config.effects.echoFeedback = 1;
     CHECK(effectsInit(&e, 48000, config.effects) == -1);
     puts("Dry bypass, echo timing/feedback, reverb decay, and live effect edits passed.");

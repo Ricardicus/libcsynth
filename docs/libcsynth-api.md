@@ -212,7 +212,7 @@ filter. Each voice has a base gain of 0.1; many notes together can still clip.
 | `SynthEffectsConfig` field | Range / units |
 | --- | --- |
 | `echoMix` | 0–1. |
-| `echoDelayMs` | 1–2000 ms. |
+| `echoDelayMs` | 1–`CSYNTH_ECHO_MAX_DELAY_MS` ms; defaults to 2000 ms. |
 | `echoFeedback` | 0–0.95. |
 | `reverbMix` | 0–1. |
 | `reverbRoom` | 0–0.95; higher means longer tails. |

@@ -21,7 +21,7 @@ int effectsInit(SynthEffects *e, double rate, SynthEffectsConfig config)
     if (!isfinite(rate) || rate < 1000 || rate > 384000 || !synthEffectsConfigValid(&config)) return -1;
     *e = (SynthEffects){.sampleRate = rate, .current = config, .target = config,
                        .smoothing = 1 - exp(-1 / (.02 * rate))};
-    if (delayInit(&e->echo, (int)ceil(2 * rate) + 2)) goto fail;
+    if (delayInit(&e->echo, (int)ceil(CSYNTH_ECHO_MAX_DELAY_MS * .001 * rate) + 2)) goto fail;
     static const double times[6] = {.0297,.0371,.0411,.0437,.0479,.0531};
     for (int i = 0; i < 6; ++i)
         if (delayInit(&e->combs[i], (int)ceil(times[i] * rate))) goto fail;

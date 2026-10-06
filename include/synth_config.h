@@ -5,6 +5,14 @@
 
 #define SYNTH_MAX_LAYERS 8
 
+/* Override for builds needing longer delays; use the same value for all clients. */
+#ifndef CSYNTH_ECHO_MAX_DELAY_MS
+#define CSYNTH_ECHO_MAX_DELAY_MS 2000
+#endif
+#if CSYNTH_ECHO_MAX_DELAY_MS < 1 || CSYNTH_ECHO_MAX_DELAY_MS > 60000
+#error "CSYNTH_ECHO_MAX_DELAY_MS must be between 1 and 60000"
+#endif
+
 typedef struct {
     FmConfig fm;
     double gain;        /* 0..1, mixed with normalization by layer count. */
@@ -20,7 +28,7 @@ typedef struct {
 
 typedef struct {
     double echoMix;       /* 0..1 */
-    double echoDelayMs;   /* 1..2000 */
+    double echoDelayMs;   /* 1..CSYNTH_ECHO_MAX_DELAY_MS */
     double echoFeedback;  /* 0..0.95 */
     double reverbMix;     /* 0..1 */
     double reverbRoom;    /* 0..0.95, feedback amount */

@@ -97,3 +97,9 @@ The package carries the include paths and math dependency for you.
 - `examples/`: the WAV renderer.
 - `tests/`: engine, FM, envelopes, effects, and preset tests.
 - `cmake/`: installed-package configuration.
+
+Echo capacity defaults to 2,000 ms. Builds that need longer echoes can define
+`CSYNTH_ECHO_MAX_DELAY_MS` (1–60,000) consistently for the library and its clients.
+The echo buffer is allocated at engine creation, never during live edits. Its
+memory use is approximately `sampleRate * maxDelayMs / 1000 * sizeof(float)`
+bytes per engine. Changing this option changes the accepted configuration range.
