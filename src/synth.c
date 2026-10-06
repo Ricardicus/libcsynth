@@ -2,6 +2,7 @@
 #include "envelope.h"
 #include "effects.h"
 #include "filters.h"
+#include "samples_private.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -14,6 +15,8 @@ typedef struct {
     FmSynth generator;
     double pitchMultiplier;
     double mixGain;
+    size_t sampleIndex;
+    double samplePosition, sampleStep;
 } LayerVoice;
 
 typedef struct {
@@ -31,12 +34,54 @@ struct Synth {
     int sampleRate;
     int layerCount;
     SynthConfig config;
+    SynthSampleBank *sampleBank;
+    SynthSourceMode sourceMode;
     SynthEffects effects;
     SynthFilters filters;
     float analysisSamples[SYNTH_ANALYSIS_SAMPLES];
     int analysisCursor;
     uint64_t samplePosition;
 };
+
+static void selectSample(Synth *engine, Voice *voice, LayerVoice *part, bool restart)
+{
+    if (!engine->sampleBank) return;
+    size_t index=0;
+    double frequency=voice->frequency*part->pitchMultiplier;
+    synthSampleBankFind(engine->sampleBank,frequency,&index);
+    if (restart || part->sampleIndex!=index) part->samplePosition=0;
+    part->sampleIndex=index;
+    const SynthSampleInfo *info=&engine->sampleBank->entries[index].info;
+    part->sampleStep=info->sampleRate/(double)engine->sampleRate*frequency/info->baseFrequencyHz;
+}
+static void restartSamples(Synth *engine)
+{
+    for (int note=0;note<NOTE_COUNT;++note)
+        for (int layer=0;layer<engine->layerCount;++layer)
+            selectSample(engine,&engine->voices[note],&engine->voices[note].layers[layer],true);
+}
+int synthApplySampleBank(Synth *engine, SynthSampleBank *bank)
+{
+    if (!engine || (bank && !bank->count)) return -1;
+    if (bank) sampleBankRetainAndSeal(bank);
+    SynthSampleBank *previous=engine->sampleBank;
+    engine->sampleBank=bank;
+    engine->sourceMode=bank ? SYNTH_SOURCE_SAMPLES : SYNTH_SOURCE_FM;
+    restartSamples(engine);
+    synthSampleBankDestroy(previous);
+    return 0;
+}
+int synthSetSourceMode(Synth *engine, SynthSourceMode mode)
+{
+    if (!engine || (mode!=SYNTH_SOURCE_FM && mode!=SYNTH_SOURCE_SAMPLES) ||
+        (mode==SYNTH_SOURCE_SAMPLES && !engine->sampleBank)) return -1;
+    if (engine->sourceMode!=mode) { engine->sourceMode=mode; restartSamples(engine); }
+    return 0;
+}
+SynthSourceMode synthGetSourceMode(const Synth *engine)
+{
+    return engine ? engine->sourceMode : SYNTH_SOURCE_FM;
+}
 
 void synthRender(Synth *engine, float *samples, size_t count)
 {
@@ -55,8 +100,10 @@ void synthRender(Synth *engine, float *samples, size_t count)
             double amplitude = outputEnvelopeNext(&voice->envelope, engine->sampleRate) * voice->velocityGain;
             for (int layer = 0; layer < engine->layerCount; ++layer) {
                 LayerVoice *part = &voice->layers[layer];
-                sample += 0.1 * amplitude * part->mixGain *
-                          fmNextSample(&part->generator, voice->frequency * part->pitchMultiplier);
+                double generated=engine->sourceMode==SYNTH_SOURCE_SAMPLES
+                    ? sampleBankNext(engine->sampleBank,part->sampleIndex,&part->samplePosition,part->sampleStep)
+                    : fmNextSample(&part->generator,voice->frequency*part->pitchMultiplier);
+                sample += 0.1 * amplitude * part->mixGain * generated;
             }
             voice->active = voice->held || voice->envelope.stage != FM_ENV_IDLE;
         }
@@ -147,6 +194,8 @@ int synthConfigure(Synth *engine, const SynthConfig *config)
             }
             part->pitchMultiplier = exp2(settings->detuneCents / 1200.0);
             part->mixGain = settings->gain / engine->layerCount;
+            if (!existing || settings->detuneCents!=engine->config.layers[layer].detuneCents)
+                selectSample(engine,voice,part,!existing);
         }
     }
     engine->config = *config;
@@ -157,6 +206,7 @@ void synthDestroy(Synth *engine)
 {
     if (!engine) return;
     effectsDestroy(&engine->effects);
+    synthSampleBankDestroy(engine->sampleBank);
     free(engine);
 }
 
@@ -190,6 +240,7 @@ static void noteOn(Synth *engine, int note, unsigned char source, int velocity)
         for (int layer = 0; layer < engine->layerCount; ++layer) {
             LayerVoice *part = &voice->layers[layer];
             fmNoteOn(&part->generator, reset);
+            if (engine->sourceMode==SYNTH_SOURCE_SAMPLES) part->samplePosition=0;
         }
     }
     voice->held = true;

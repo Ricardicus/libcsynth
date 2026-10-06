@@ -16,7 +16,7 @@ ctest --test-dir build-lib --output-on-failure
 ```
 
 This builds `libcsynth.a`. You need a C11 compiler and CMake. On Unix the CMake
-target also carries the system math library; there are no third-party core
+target also carries the system math library; WAV/MP3 decoders are vendored, with no extra installed
 dependencies. Add `-DBUILD_TESTING=OFF` if you only want the library.
 
 In another project using this repo as a subdirectory:
@@ -350,3 +350,30 @@ This library doesn't ship an audio backend. The keyboard app in the parent
 project has its own SDL adapter, outside this folder. It calls `synthRender()`
 from its device callback and locks the device around control calls. Your own
 project can use the same pattern with whichever audio backend it already has.
+
+## Sample-bank source mode
+
+See the [sample-instrument walkthrough](../README.md#make-an-instrument-from-recordings)
+for the map format, pitch conversion, looping, and a complete example.
+
+| Call | What it does |
+| --- | --- |
+| `synthSampleBankCreate()` | Makes an empty mutable bank, initially owned by the caller. |
+| `synthSampleBankAddPcm(bank, &data, error, size)` | Copies mono PCM and metadata; returns 0 or -1. |
+| `synthSampleBankAddFile(bank, path, baseHz, gain, loopStart, loopEnd, error, size)` | Decodes a WAV/MP3 and appends it; returns 0 or -1. |
+| `synthSampleBankLoad(mapPath, error, size)` | Loads a complete `.csamples` bank, or returns NULL without applying it. |
+| `synthSampleBankCount(bank)` | Returns entry count (0 for NULL). |
+| `synthSampleBankGetInfo(bank, index, &info)` | Copies recording metadata; returns 0 or -1. |
+| `synthSampleBankFind(bank, frequencyHz, &index)` | Finds the nearest base pitch in semitones; ties use the earlier entry. |
+| `synthApplySampleBank(engine, bank)` | Retains/freezes a nonempty bank, restarts sample cursors, and enters sample mode; returns 0 or -1. NULL bank detaches and selects FM. |
+| `synthSetSourceMode(engine, mode)` | Selects `SYNTH_SOURCE_FM` or `SYNTH_SOURCE_SAMPLES`; samples require an attached bank. Returns 0 or -1. |
+| `synthGetSourceMode(engine)` | Reads current mode; NULL returns FM. |
+| `synthSampleBankDestroy(bank)` | Releases one caller reference; NULL is harmless. Attached engines retain their own references. |
+
+The bank is separate from `SynthConfig` and `.synth` serialization. Source mode
+replaces FM generation in every active layer; layer gain/detune, velocity,
+master ADSR, filters, echo/reverb, clipping, and audio snapshots still apply.
+The render call has no allocations or file I/O. Bank creation/loading/applying
+belongs outside the audio callback: application may free the previous bank.
+Applied banks are immutable and shareable; each engine still needs a single
+owner or external synchronization.

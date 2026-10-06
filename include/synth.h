@@ -2,12 +2,26 @@
 #define SYNTH_H
 
 #include "synth_config.h"
+#include "samples.h"
 #include <stddef.h>
 #include <stdint.h>
 
 #define SYNTH_ANALYSIS_SAMPLES 2048
 
 typedef struct Synth Synth;
+typedef enum { SYNTH_SOURCE_FM = 0, SYNTH_SOURCE_SAMPLES = 1 } SynthSourceMode;
+
+/* Apply a nonempty bank and enter sample mode; NULL detaches it and enters FM.
+ * Engine retains the bank, which becomes immutable, so the caller may destroy
+ * its reference immediately afterward. Replacing/detaching may free old data:
+ * apply outside the audio callback with exclusive access to the engine.
+ * Active voices restart sample playback but keep their ADSR/ownership state.
+ * Failure leaves the previous bank and mode intact. */
+int synthApplySampleBank(Synth *engine, SynthSampleBank *bank);
+/* FM is the default. Switching back to samples requires an attached bank.
+ * Does not allocate/free. Active voices keep ADSR, restarting sample cursors. */
+int synthSetSourceMode(Synth *engine, SynthSourceMode mode);
+SynthSourceMode synthGetSourceMode(const Synth *engine); /* NULL returns FM. */
 
 /* SDL-free engine. Rate: 1000..384000 Hz. NULL config selects defaults.
  * Returns NULL for invalid settings or allocation failure. */

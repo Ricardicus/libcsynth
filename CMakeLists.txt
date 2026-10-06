@@ -17,9 +17,11 @@ function(csynth_compile_options target)
 endfunction()
 
 add_library(csynth STATIC src/synth.c src/effects.c src/envelope.c src/synth_config.c
-                          src/oscillator.c src/fm.c src/presets.c src/filters.c)
+                          src/oscillator.c src/fm.c src/presets.c src/filters.c
+                          src/samples.c src/sample_files.c)
 add_library(csynth::csynth ALIAS csynth)
 target_compile_features(csynth PUBLIC c_std_11)
+target_include_directories(csynth SYSTEM PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 target_include_directories(csynth PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/csynth>)
@@ -33,11 +35,14 @@ if(CSYNTH_BUILD_EXAMPLES)
     add_executable(csynth_live examples/live.c)
     target_link_libraries(csynth_live PRIVATE csynth::csynth)
     csynth_compile_options(csynth_live)
+    add_executable(csynth_samples examples/sample_player.c)
+    target_link_libraries(csynth_samples PRIVATE csynth::csynth)
+    csynth_compile_options(csynth_samples)
 endif()
 
 install(TARGETS csynth EXPORT csynthTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(FILES include/synth.h include/synth_config.h include/fm.h include/oscillator.h
-              include/envelope.h include/effects.h include/presets.h include/filters.h
+              include/envelope.h include/effects.h include/presets.h include/filters.h include/samples.h
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/csynth)
 install(EXPORT csynthTargets NAMESPACE csynth:: DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/csynth)
 configure_package_config_file(cmake/csynthConfig.cmake.in
@@ -49,15 +54,20 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/csynthConfig.cmake
               ${CMAKE_CURRENT_BINARY_DIR}/csynthConfigVersion.cmake
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/csynth)
 install(FILES README.md docs/libcsynth-api.md DESTINATION ${CMAKE_INSTALL_DOCDIR})
+install(FILES third_party/LICENSE third_party/README.md DESTINATION ${CMAKE_INSTALL_DOCDIR}/third_party)
 install(DIRECTORY presets/factory DESTINATION ${CMAKE_INSTALL_DATADIR}/csynth/presets)
 
 if(CSYNTH_BUILD_TESTS)
     enable_testing()
-    foreach(test_name IN ITEMS presets factory_bank effects envelope fm engine filters)
+    foreach(test_name IN ITEMS presets factory_bank effects envelope fm engine filters samples)
         add_executable(test_${test_name} tests/test_${test_name}.c)
         target_link_libraries(test_${test_name} PRIVATE csynth::csynth)
         csynth_compile_options(test_${test_name})
         add_test(NAME ${test_name} COMMAND test_${test_name})
     endforeach()
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/sample-test")
+    target_compile_definitions(test_samples PRIVATE
+        SAMPLE_TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}/sample-test"
+        MP3_TEST_FILE="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/a4.mp3")
     target_compile_definitions(test_factory_bank PRIVATE FACTORY_TEST_DIR="${CMAKE_CURRENT_SOURCE_DIR}/presets")
 endif()
