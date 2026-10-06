@@ -1,6 +1,7 @@
 #include "synth.h"
 #include "envelope.h"
 #include "effects.h"
+#include "filters.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -31,6 +32,7 @@ struct Synth {
     int layerCount;
     SynthConfig config;
     SynthEffects effects;
+    SynthFilters filters;
     float analysisSamples[SYNTH_ANALYSIS_SAMPLES];
     int analysisCursor;
     uint64_t samplePosition;
@@ -58,6 +60,7 @@ void synthRender(Synth *engine, float *samples, size_t count)
             }
             voice->active = voice->held || voice->envelope.stage != FM_ENV_IDLE;
         }
+        sample = filtersNext(&engine->filters, (float)sample);
         sample = effectsNext(&engine->effects, (float)sample);
         samples[i] = (float)fmax(-1.0, fmin(1.0, sample));
         /* Capture the actual mixed output; analysis stays on the main thread. */
@@ -71,12 +74,15 @@ Synth *synthCreate(int sampleRate, const SynthConfig *config)
 {
     SynthConfig defaults;
     if (!config) { defaults = synthDefaultConfig(); config = &defaults; }
-    if (sampleRate < 1 || sampleRate > 384000 || !synthConfigValid(config)) return NULL;
+    if (sampleRate < 1000 || sampleRate > 384000 || !synthConfigValid(config)) return NULL;
     Synth *engine = calloc(1, sizeof(*engine));
     if (!engine) return NULL;
     engine->sampleRate = sampleRate;
     engine->layerCount = config->layerCount;
     engine->config = *config;
+    if (filtersInit(&engine->filters, sampleRate, config->filters) != 0) {
+        free(engine); return NULL;
+    }
     if (effectsInit(&engine->effects, sampleRate, config->effects) != 0) {
         free(engine); return NULL;
     }
@@ -101,6 +107,7 @@ Synth *synthCreate(int sampleRate, const SynthConfig *config)
 int synthConfigure(Synth *engine, const SynthConfig *config)
 {
     if (!engine || !synthConfigValid(config)) return -1;
+    filtersConfigure(&engine->filters, config->filters);
     effectsConfigure(&engine->effects, config->effects);
     int previousLayers = engine->layerCount;
     engine->layerCount = config->layerCount;

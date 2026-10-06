@@ -103,7 +103,7 @@ putting one on the stack.
 | `int synthConfigure(Synth *engine, const SynthConfig *config)` | Copies a patch into the engine, affecting held notes and future notes. Returns 0 or −1. |
 | `int synthGetConfig(const Synth *engine, SynthConfig *config)` | Copies the current patch out. Returns 0 or −1 for invalid pointers. |
 
-Sample rate must be 1–384000 Hz; use the actual rate of your audio system.
+Sample rate must be 1000–384000 Hz; use the actual rate of your audio system.
 An engine's rate stays fixed for its lifetime. Output samples are clamped to
 −1…1. You can render any block size, including one sample. A zero-length render
 doesn't advance time. A null output pointer is ignored; rendering with a null
@@ -163,6 +163,7 @@ point: a ratio and pulse width must be positive even for a sine operator.
 | `layers[i].fm` | That layer's FM chain. |
 | `outputEnvelope` | Nonnegative attack/decay/release in milliseconds, sustain in 0–100 percent. Each note has its own amplitude envelope. |
 | `effects` | Echo and reverb applied after mixing all notes. |
+| `filters` | Shared low-pass/high-pass cutoff frequencies before effects; 0 bypasses, otherwise 20–20000 Hz. |
 
 `synthConfigValid()` checks the active layers/operators; `synthEffectsConfigValid()`
 checks just effects. Both return false for null pointers. Eight layer slots and
@@ -220,6 +221,32 @@ filter. Each voice has a base gain of 0.1; many notes together can still clip.
 Echo is a feedback delay. Reverb uses six damped comb delays and two all-pass
 stages. Their buffers survive live edits, so a previous patch can leave a tail.
 
+### Low-pass and high-pass
+
+```c
+sound.filters.lowpassHz = 4000; /* Soften the bright end. */
+sound.filters.highpassHz = 80;  /* Remove low rumble. */
+synthConfigure(engine, &sound);
+```
+
+Both filters are second-order Butterworth filters, with a 12 dB/octave rolloff
+and a −3 dB cutoff. They process the mixed voices before echo and reverb, with
+high-pass first, then low-pass. Both start bypassed; set a cutoff to zero to
+bypass that filter again. Existing effects tails continue when the filter moves.
+
+Cutoffs accept 20–20000 Hz (or 0), and internally clamp to 45% of the sample
+rate. This keeps them stable with lower-rate renderers. Cutoff and bypass edits
+smooth over about 20 ms and keep the filter state, without allocating memory.
+`synthFilterConfigValid()` checks the two fields. There is no resonance control.
+If the high-pass cutoff is above the low-pass cutoff, the combination greatly
+reduces the sound; the engine allows that choice.
+
+For standalone filtering, include `filters.h`, initialize `SynthFilters` with
+`filtersInit(&filters, rate, config)` (0 or −1), then call
+`filtersNext(&filters, sample)` once per sample. `filtersConfigure()` makes live
+changes and ignores invalid configs. No cleanup is needed: filter state has no
+heap buffers. Use one owning thread, just like the other DSP pieces.
+
 ## Presets and files
 
 `SYNTH_PRESET_COUNT` is currently 64. `synthPresetName(index)` returns a name and
@@ -265,7 +292,9 @@ int result = presetRead("my-sound.synth", name, &sound, error, sizeof(error));
 ```
 
 Both return 0 or −1. Writing refuses to overwrite a file and keeps full float
-precision. It also saves and validates inactive slots. Start from a default or
+precision. New files use preset format version 2, including a `filters lowpassHz highpassHz`
+row. Version 1 files still load with both filters bypassed. It also saves and
+validates inactive slots. Start from a default or
 preset so those slots contain valid settings. Pass valid pointers/buffers.
 Filesystem calls belong outside audio callbacks. Destroy an initialized library
 before reinitializing it. The folder is explicit; the core doesn't read the

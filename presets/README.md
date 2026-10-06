@@ -121,7 +121,8 @@ simple intervals can work better than dense chords.
 fallback if those files are unavailable. `user/` contains sounds saved with
 **Save setting**; changes to the factory bank do not change those files.
 
-The version 1 format preserves all eight layer slots and all eight operator
+Version 2 adds output filter cutoff settings. Version 1 files still load with
+both filters bypassed. Both versions preserve all eight layer slots and all eight operator
 slots per layer, including inactive settings. `layers` and each `layer` row's
 operator count determine which slots sound. Repeated inactive rows are expected.
 Values retain full precision when saved; the on-screen controls round them.

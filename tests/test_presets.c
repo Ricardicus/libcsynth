@@ -14,12 +14,14 @@ int main(void)
     c.layers[0].fm.operators[7].ratio=3.141592653589793;
     c.layers[6].detuneCents=-12.3456789;
     c.effects.echoMix=.123456789; c.effects.echoFeedback=.55;
+    c.filters=(SynthFilterConfig){4321.123456789,123.456789};
     int saved=presetLibrarySave(&library,"My flute 1",&c,error,sizeof(error));
     CHECK(saved==SYNTH_PRESET_COUNT && library.count==SYNTH_PRESET_COUNT+1);
     char path[PRESET_PATH_MAX]; strcpy(path,library.items[saved].path);
     char name[PRESET_NAME_MAX+1]; SynthConfig restored;
     CHECK(presetRead(path,name,&restored,error,sizeof(error))==0);
     CHECK(!strcmp(name,"My flute 1") && restored.layerCount==2);
+    CHECK(restored.filters.lowpassHz==c.filters.lowpassHz && restored.filters.highpassHz==c.filters.highpassHz);
     CHECK(restored.layers[0].fm.operators[7].ratio==c.layers[0].fm.operators[7].ratio);
     CHECK(restored.layers[6].detuneCents==c.layers[6].detuneCents);
     CHECK(restored.effects.echoMix==c.effects.echoMix && restored.outputEnvelope.releaseMs==220);

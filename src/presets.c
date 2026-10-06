@@ -52,12 +52,13 @@ int presetWrite(const char *path, const char *name, const SynthConfig *c, char *
     if (!allValid(c)) return fail(error, size, "Invalid synth settings.");
     FILE *f = fopen(path, "wx");
     if (!f) return fail(error, size, errno == EEXIST ? "That preset already exists." : "Cannot save preset: %s", strerror(errno));
-    fprintf(f, "SYNTH_PRESET 1\nname %s\n", name);
+    fprintf(f, "SYNTH_PRESET 2\nname %s\n", name);
     const SynthEnvelopeConfig *e = &c->outputEnvelope;
     fprintf(f, "master %d %d %d %d\n", e->attackMs, e->decayMs, e->sustainPercent, e->releaseMs);
     const SynthEffectsConfig *fx = &c->effects;
     fprintf(f, "effects %.17g %.17g %.17g %.17g %.17g %.17g\n", fx->echoMix, fx->echoDelayMs,
             fx->echoFeedback, fx->reverbMix, fx->reverbRoom, fx->reverbDamping);
+    fprintf(f, "filters %.17g %.17g\n", c->filters.lowpassHz, c->filters.highpassHz);
     fprintf(f, "layers %d\n", c->layerCount);
     for (int l = 0; l < SYNTH_MAX_LAYERS; ++l) {
         const SynthLayerConfig *layer = &c->layers[l];
@@ -104,7 +105,10 @@ int presetRead(const char *path, char *name, SynthConfig *config, char *error, s
     char title[128], readName[PRESET_NAME_MAX+1];
     if (!fgets(title,sizeof(title),f)) goto invalid;
     title[strcspn(title,"\r\n")]=0;
-    if (strcmp(title,"SYNTH_PRESET 1")) goto invalid;
+    int version;
+    if (!strcmp(title,"SYNTH_PRESET 1")) version = 1;
+    else if (!strcmp(title,"SYNTH_PRESET 2")) version = 2;
+    else goto invalid;
     if (!fgets(title, sizeof(title), f) || strncmp(title, "name ", 5)) goto invalid;
     title[strcspn(title, "\r\n")] = 0;
     if (!validName(title + 5)) goto invalid;
@@ -116,6 +120,8 @@ int presetRead(const char *path, char *name, SynthConfig *config, char *error, s
     if (!tag(f,"effects") || !readReal(f,&fx->echoMix) || !readReal(f,&fx->echoDelayMs) ||
         !readReal(f,&fx->echoFeedback) || !readReal(f,&fx->reverbMix) || !readReal(f,&fx->reverbRoom) ||
         !readReal(f,&fx->reverbDamping)) goto invalid;
+    if (version == 2 && (!tag(f,"filters") || !readReal(f,&c.filters.lowpassHz) ||
+        !readReal(f,&c.filters.highpassHz))) goto invalid;
     if (!tag(f,"layers") || !readInt(f,&c.layerCount)) goto invalid;
     for (int l = 0; l < SYNTH_MAX_LAYERS; ++l) {
         SynthLayerConfig *layer = &c.layers[l];

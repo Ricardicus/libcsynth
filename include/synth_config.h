@@ -28,10 +28,16 @@ typedef struct {
 } SynthEffectsConfig;
 
 typedef struct {
+    double lowpassHz;  /* 0 bypasses; otherwise 20..20000 Hz. */
+    double highpassHz; /* 0 bypasses; otherwise 20..20000 Hz. */
+} SynthFilterConfig;
+
+typedef struct {
     SynthEffectsConfig effects;
     SynthEnvelopeConfig outputEnvelope; /* Shared amplitude ADSR for every note. */
     int layerCount;
     SynthLayerConfig layers[SYNTH_MAX_LAYERS];
+    SynthFilterConfig filters; /* Shared tone filters before echo/reverb. */
 } SynthConfig;
 
 SynthConfig synthDefaultConfig(void);
@@ -39,6 +45,7 @@ SynthConfig synthDefaultConfig(void);
 const char *synthPresetName(int index);
 SynthConfig synthPresetConfig(int index);
 bool synthEffectsConfigValid(const SynthEffectsConfig *config);
+bool synthFilterConfigValid(const SynthFilterConfig *config);
 bool synthConfigValid(const SynthConfig *config);
 
 #endif

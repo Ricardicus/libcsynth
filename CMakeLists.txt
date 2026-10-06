@@ -17,7 +17,7 @@ function(csynth_compile_options target)
 endfunction()
 
 add_library(csynth STATIC src/synth.c src/effects.c src/envelope.c src/synth_config.c
-                          src/oscillator.c src/fm.c src/presets.c)
+                          src/oscillator.c src/fm.c src/presets.c src/filters.c)
 add_library(csynth::csynth ALIAS csynth)
 target_compile_features(csynth PUBLIC c_std_11)
 target_include_directories(csynth PUBLIC
@@ -37,7 +37,7 @@ endif()
 
 install(TARGETS csynth EXPORT csynthTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(FILES include/synth.h include/synth_config.h include/fm.h include/oscillator.h
-              include/envelope.h include/effects.h include/presets.h
+              include/envelope.h include/effects.h include/presets.h include/filters.h
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/csynth)
 install(EXPORT csynthTargets NAMESPACE csynth:: DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/csynth)
 configure_package_config_file(cmake/csynthConfig.cmake.in
@@ -53,7 +53,7 @@ install(DIRECTORY presets/factory DESTINATION ${CMAKE_INSTALL_DATADIR}/csynth/pr
 
 if(CSYNTH_BUILD_TESTS)
     enable_testing()
-    foreach(test_name IN ITEMS presets factory_bank effects envelope fm engine)
+    foreach(test_name IN ITEMS presets factory_bank effects envelope fm engine filters)
         add_executable(test_${test_name} tests/test_${test_name}.c)
         target_link_libraries(test_${test_name} PRIVATE csynth::csynth)
         csynth_compile_options(test_${test_name})

@@ -9,7 +9,7 @@
 
 typedef struct Synth Synth;
 
-/* SDL-free engine. Rate: 1..384000 Hz. NULL config selects defaults.
+/* SDL-free engine. Rate: 1000..384000 Hz. NULL config selects defaults.
  * Returns NULL for invalid settings or allocation failure. */
 Synth *synthCreate(int sampleRate, const SynthConfig *config);
 void synthDestroy(Synth *engine); /* NULL is harmless. */

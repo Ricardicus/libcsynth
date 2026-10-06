@@ -23,6 +23,7 @@ bool synthConfigValid(const SynthConfig *config)
     if (config == NULL || config->layerCount < 1 || config->layerCount > SYNTH_MAX_LAYERS)
         return false;
     if (!synthEffectsConfigValid(&config->effects)) return false;
+    if (!synthFilterConfigValid(&config->filters)) return false;
     const SynthEnvelopeConfig *env = &config->outputEnvelope;
     if (env->attackMs < 0 || env->decayMs < 0 || env->releaseMs < 0 ||
         env->sustainPercent < 0 || env->sustainPercent > 100)
@@ -151,6 +152,13 @@ SynthConfig synthPresetConfig(int index)
     default: break;
     }
     return c;
+}
+
+bool synthFilterConfigValid(const SynthFilterConfig *c)
+{
+    return c && isfinite(c->lowpassHz) && isfinite(c->highpassHz) &&
+        (c->lowpassHz == 0 || (c->lowpassHz >= 20 && c->lowpassHz <= 20000)) &&
+        (c->highpassHz == 0 || (c->highpassHz >= 20 && c->highpassHz <= 20000));
 }
 
 bool synthEffectsConfigValid(const SynthEffectsConfig *c)

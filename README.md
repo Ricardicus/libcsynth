@@ -7,7 +7,7 @@ system, or render them straight to a file.
 The engine supports chords across 128 note pitches, up to eight independent
 layers, and an FM chain of up to eight operators in each layer. Waveforms are
 sine, square, triangle, saw, pulse, and noise. Each note has a master ADSR;
-modulators have their own timbre envelopes. Echo and reverb run after mixing.
+modulators have their own timbre envelopes. Low-pass and high-pass tone filters run on the mix, followed by echo and reverb.
 The 64 factory sounds include flutes, keys, bells, basses, leads, pads, and
 some stranger textures.
 

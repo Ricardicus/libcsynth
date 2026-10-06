@@ -30,6 +30,7 @@ int main(void)
         SAME(outputEnvelope.sustainPercent); SAME(outputEnvelope.releaseMs);
         SAME(effects.echoMix); SAME(effects.echoDelayMs); SAME(effects.echoFeedback);
         SAME(effects.reverbMix); SAME(effects.reverbRoom); SAME(effects.reverbDamping);
+        SAME(filters.lowpassHz); SAME(filters.highpassHz);
         for (int l=0;l<SYNTH_MAX_LAYERS;++l) {
             SAME(layers[l].gain); SAME(layers[l].detuneCents); SAME(layers[l].fm.operatorCount);
             for (int o=0;o<FM_MAX_OPERATORS;++o) {
