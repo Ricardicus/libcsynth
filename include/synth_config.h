@@ -49,7 +49,7 @@ typedef struct {
 } SynthConfig;
 
 SynthConfig synthDefaultConfig(void);
-#define SYNTH_PRESET_COUNT 64
+#define SYNTH_PRESET_COUNT 72
 const char *synthPresetName(int index);
 SynthConfig synthPresetConfig(int index);
 bool synthEffectsConfigValid(const SynthEffectsConfig *config);

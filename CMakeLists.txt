@@ -59,7 +59,7 @@ install(DIRECTORY presets/factory DESTINATION ${CMAKE_INSTALL_DATADIR}/csynth/pr
 
 if(CSYNTH_BUILD_TESTS)
     enable_testing()
-    foreach(test_name IN ITEMS presets factory_bank effects envelope fm engine filters samples)
+    foreach(test_name IN ITEMS presets factory_bank effects envelope fm engine filters samples routing)
         add_executable(test_${test_name} tests/test_${test_name}.c)
         target_link_libraries(test_${test_name} PRIVATE csynth::csynth)
         csynth_compile_options(test_${test_name})

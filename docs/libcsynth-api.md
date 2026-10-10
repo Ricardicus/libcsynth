@@ -249,7 +249,7 @@ heap buffers. Use one owning thread, just like the other DSP pieces.
 
 ## Presets and files
 
-`SYNTH_PRESET_COUNT` is currently 64. `synthPresetName(index)` returns a name and
+`SYNTH_PRESET_COUNT` is currently 72. `synthPresetName(index)` returns a name and
 `synthPresetConfig(index)` returns its compiled patch. Valid indices run from
 0 to `SYNTH_PRESET_COUNT - 1`. Invalid indices return `"Custom"` and the default
 patch. These calls don't read files or require an engine.
@@ -292,7 +292,7 @@ int result = presetRead("my-sound.synth", name, &sound, error, sizeof(error));
 ```
 
 Both return 0 or −1. Writing refuses to overwrite a file and keeps full float
-precision. New files use preset format version 2, including a `filters lowpassHz highpassHz`
+precision. New files use preset format version 3, including a `filters lowpassHz highpassHz`
 row. Version 1 files still load with both filters bypassed. It also saves and
 validates inactive slots. Start from a default or
 preset so those slots contain valid settings. Pass valid pointers/buffers.
@@ -377,3 +377,81 @@ The render call has no allocations or file I/O. Bank creation/loading/applying
 belongs outside the audio callback: application may free the previous bank.
 Applied banks are immutable and shareable; each engine still needs a single
 owner or external synchronization.
+
+### Routing API
+
+
+The original serial chain still works exactly as before: `algorithm =
+FM_ALGORITHM_CHAIN` is zero, old presets load in that mode, and feedback starts
+at zero. There are now six algorithms, selected per layer:
+
+| Algorithm | Connections and audible operators |
+| --- | --- |
+| `FM_ALGORITHM_CHAIN` | OP1 → OP2 → … → OPn; only OPn is audible, at unity level. |
+| `FM_ALGORITHM_PAIRS` | OP1 → OP2, OP3 → OP4, etc.; each pair's carrier is audible. An unmatched last operator is also audible. |
+| `FM_ALGORITHM_FAN_IN` | Every earlier operator modulates OPn; OPn is audible. |
+| `FM_ALGORITHM_FAN_OUT` | OP1 modulates every later operator; those operators are audible. With one operator it is audible itself. |
+| `FM_ALGORITHM_ADDITIVE` | No inter-operator modulation; every operator is an audible carrier. |
+| `FM_ALGORITHM_CUSTOM` | The routing matrix chooses connections; any operator can also contribute to the output. |
+
+For graph modes, `operators[i].outputLevel` ranges from 0 to 1. The output is
+`sum(level[i] * wave[i]) / max(1, sum(level[i]))` over that algorithm's audible
+carriers. Muting a carrier is allowed, including muting all of them. Legacy
+chain mode ignores output levels to keep old sounds identical.
+
+`routing[source][destination]` ranges from 0 to 1 and is used in Custom mode.
+Only earlier operators may feed later ones: `source < destination`. All
+backward/diagonal entries must be zero, even for unused slots. This fixed
+ordering avoids cycles and makes rendering deterministic without allocations
+or graph traversal on the audio thread. A modulator can feed several carriers,
+and several modulators can feed the same carrier. An operator may be both
+audible and a modulator. Reorder operators to express a different DAG.
+
+```c
+SynthConfig patch = synthDefaultConfig();
+FmConfig *fm = &patch.layers[0].fm;
+fm->operatorCount = 4;
+fm->algorithm = FM_ALGORITHM_CUSTOM;
+fm->routing[0][2] = 1.0; // OP1 and OP2 modulate OP3.
+fm->routing[1][2] = 0.5;
+fm->routing[0][3] = 0.25; // OP1 also modulates OP4.
+fm->operators[0].outputLevel = 0;
+fm->operators[1].outputLevel = 0;
+fm->operators[2].outputLevel = 1;
+fm->operators[3].outputLevel = 0.5;
+fm->operators[0].feedback = 0.3;
+synthConfigure(engine, &patch); // While your render thread is excluded.
+```
+
+This engine uses **frequency modulation**, including feedback. For operator
+`i`, with nominal frequency `f_i`, index envelope `e_i[n]`, FM depth `rm_i`,
+feedback `b_i`, and connection `r[j][i]`:
+
+```text
+F_i[n] = f_i + sum(j < i, r[j][i] * f_j * rm_j * e_j[n] * y_j[n])
+              + f_i * b_i * e_i[n] * y_i[n-1]
+y_i[n] = waveform_i(phase_i[n])
+phase_i[n+1] = phase_i[n] + 2*pi*F_i[n]/sampleRate
+```
+
+Vibrato scales the instantaneous frequency before integration. Self-feedback
+uses the previous output, so there is always one sample of delay. It is not a
+phase offset. Feedback ranges from 0 to 8 (deviation / nominal Hz); zero turns
+it off. The source's Sustain/Decay/ADSR index envelope shapes outgoing FM and
+feedback, but does not fade an audible carrier's level. Master ADSR still
+shapes note volume. A fresh note resets feedback history; tail retriggers and
+live configurations retain oscillator phases and existing feedback history.
+
+High feedback/depth can alias. This version does not add oversampling,
+band-limited waveforms, arbitrary cyclic routing, or per-carrier amplitude
+envelopes. Start with modest feedback and adjust by ear. Route/algorithm edits
+can change the waveform abruptly, like existing FM-depth changes.
+
+The eight **Graph** presets (indices 64–71) demonstrate these features; the
+original 64 preset indices keep their names and positions. Of those sounds,
+28 now use graph routing for finer attack and sustain detail; see the
+[factory sound guide](../presets/README.md#routing-refresh). New `.synth` exports
+use **version 3**: each layer has an `algorithm` row, eight `route` rows, and
+each `op` row appends output level and feedback. Readers still accept v1/v2
+as legacy chains with output level 1 and feedback 0. Older library builds do
+not read v3, so rebuild clients when updating these public config structs.

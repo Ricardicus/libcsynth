@@ -32,8 +32,11 @@ int main(void)
         SAME(effects.reverbMix); SAME(effects.reverbRoom); SAME(effects.reverbDamping);
         SAME(filters.lowpassHz); SAME(filters.highpassHz);
         for (int l=0;l<SYNTH_MAX_LAYERS;++l) {
+            SAME(layers[l].fm.algorithm);
+            for (int from=0;from<8;++from) for(int to=0;to<8;++to) SAME(layers[l].fm.routing[from][to]);
             SAME(layers[l].gain); SAME(layers[l].detuneCents); SAME(layers[l].fm.operatorCount);
             for (int o=0;o<FM_MAX_OPERATORS;++o) {
+                SAME(layers[l].fm.operators[o].outputLevel); SAME(layers[l].fm.operators[o].feedback);
                 SAME(layers[l].fm.operators[o].waveform); SAME(layers[l].fm.operators[o].pulseWidth);
                 SAME(layers[l].fm.operators[o].ratio); SAME(layers[l].fm.operators[o].rm);
                 SAME(layers[l].fm.operators[o].indexMode); SAME(layers[l].fm.operators[o].decayRate);

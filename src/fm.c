@@ -12,7 +12,7 @@ FmConfig fmDefaultConfig(void)
             .vibratoRateHz = 5.0, .vibratoDepthCents = 0.0,
             .rm = 2.0, .ratio = 1.0, .indexMode = FM_INDEX_SUSTAIN,
             .decayRate = 2.0, .attackMs = 10, .decayMs = 200,
-            .sustainPercent = 50, .releaseMs = 300
+            .sustainPercent = 50, .releaseMs = 300, .outputLevel = 1.0
         };
     }
     return config;
@@ -32,7 +32,8 @@ static bool operatorConfigValid(const FmOperatorConfig *config)
            isfinite(config->decayRate) && config->decayRate >= 0.0 &&
            config->attackMs >= 0 && config->decayMs >= 0 &&
            config->sustainPercent >= 0 && config->sustainPercent <= 100 &&
-           config->releaseMs >= 0;
+           config->releaseMs >= 0 && isfinite(config->outputLevel) && config->outputLevel >= 0 && config->outputLevel <= 1 &&
+           isfinite(config->feedback) && config->feedback >= 0 && config->feedback <= 8;
 }
 
 bool fmConfigValid(const FmConfig *config)
@@ -43,7 +44,17 @@ bool fmConfigValid(const FmConfig *config)
     for (int i = 0; i < config->operatorCount; ++i)
         if (!operatorConfigValid(&config->operators[i]))
             return false;
+    if (config->algorithm < 0 || config->algorithm >= FM_ALGORITHM_COUNT) return false;
+    for (int i=0;i<FM_MAX_OPERATORS;++i) for (int j=0;j<FM_MAX_OPERATORS;++j) {
+        double route=config->routing[i][j];
+        if (!isfinite(route) || route<0 || route>1 || (i>=j && route!=0)) return false;
+    }
     return true;
+}
+const char *fmAlgorithmName(FmAlgorithm algorithm)
+{
+    static const char *names[]={"Serial chain","Parallel pairs","Modulators to carrier","Shared modulator","Additive carriers","Custom graph"};
+    return algorithm>=0 && algorithm<FM_ALGORITHM_COUNT ? names[algorithm] : "Unknown";
 }
 
 int fmInit(FmSynth *synth, double sampleRate, const FmConfig *config)
@@ -61,6 +72,30 @@ int fmInit(FmSynth *synth, double sampleRate, const FmConfig *config)
         oscillatorSetVibrato(&op->oscillator, op->config.vibratoRateHz,
                             op->config.vibratoDepthCents);
     }
+    synth->algorithm=config->algorithm;
+    int count=synth->operatorCount;
+    for (int i=0;i<count;++i) {
+        for (int j=i+1;j<count;++j) {
+            double route=0;
+            switch (config->algorithm) {
+            case FM_ALGORITHM_CHAIN: route=j==i+1; break;
+            case FM_ALGORITHM_PAIRS: route=i%2==0 && j==i+1; break;
+            case FM_ALGORITHM_FAN_IN: route=j==count-1; break;
+            case FM_ALGORITHM_FAN_OUT: route=i==0; break;
+            case FM_ALGORITHM_CUSTOM: route=config->routing[i][j]; break;
+            default: break;
+            }
+            synth->routing[i][j]=route;
+            if (route>0) synth->modulators[i]=true;
+        }
+        synth->modulators[i] |= config->operators[i].feedback>0;
+        bool audible=config->algorithm==FM_ALGORITHM_CUSTOM || config->algorithm==FM_ALGORITHM_ADDITIVE ||
+            (config->algorithm==FM_ALGORITHM_CHAIN || config->algorithm==FM_ALGORITHM_FAN_IN ? i==count-1 :
+             config->algorithm==FM_ALGORITHM_PAIRS ? i%2==1 || i==count-1 : i>0 || count==1);
+        synth->outputLevels[i]=audible ? (config->algorithm==FM_ALGORITHM_CHAIN ? 1.0 : config->operators[i].outputLevel) : 0;
+        synth->outputNormalization+=synth->outputLevels[i];
+    }
+    synth->outputNormalization=fmax(1.0,synth->outputNormalization);
     return 0;
 }
 
@@ -93,7 +128,8 @@ void fmNoteOn(FmSynth *synth, bool resetPhases)
     if (synth->held)
         return;
     synth->held = true;
-    for (int i = 0; i < synth->operatorCount - 1; ++i) {
+    for (int i = 0; i < synth->operatorCount; ++i) {
+        if (!synth->modulators[i]) continue;
         FmOperator *op = &synth->operators[i];
         if (resetPhases)
             op->indexEnvelope = 0.0;
@@ -107,6 +143,7 @@ void fmNoteOn(FmSynth *synth, bool resetPhases)
     }
     if (resetPhases) {
         for (int i = 0; i < synth->operatorCount; ++i) {
+            synth->previousOutputs[i] = 0.0;
             synth->operators[i].oscillator.phase = 0.0;
             synth->operators[i].oscillator.vibratoPhase = 0.0;
         }
@@ -118,7 +155,8 @@ void fmNoteOff(FmSynth *synth)
     if (!synth->held)
         return;
     synth->held = false;
-    for (int i = 0; i < synth->operatorCount - 1; ++i) {
+    for (int i = 0; i < synth->operatorCount; ++i) {
+        if (!synth->modulators[i]) continue;
         FmOperator *op = &synth->operators[i];
         if (op->config.indexMode == FM_INDEX_ADSR) {
             startStage(op, FM_ENV_RELEASE);
@@ -130,7 +168,8 @@ void fmNoteOff(FmSynth *synth)
 int fmReleaseDurationMs(const FmSynth *synth)
 {
     int duration = 0;
-    for (int i = 0; i < synth->operatorCount - 1; ++i) {
+    for (int i = 0; i < synth->operatorCount; ++i) {
+        if (!synth->modulators[i]) continue;
         const FmOperatorConfig *config = &synth->operators[i].config;
         if (config->indexMode == FM_INDEX_ADSR && config->releaseMs > duration)
             duration = config->releaseMs;
@@ -187,31 +226,28 @@ float fmNextSample(FmSynth *synth, double baseFrequencyHz)
     if (!isfinite(baseFrequencyHz) || baseFrequencyHz <= 0.0)
         return 0.0f;
 
-    /* Validate all frequencies before advancing any operator's state. */
-    double frequencies[FM_MAX_OPERATORS];
-    double deviations[FM_MAX_OPERATORS];
-    for (int i = 0; i < synth->operatorCount; ++i) {
-        const FmOperator *op = &synth->operators[i];
-        frequencies[i] = baseFrequencyHz * op->config.ratio;
-        deviations[i] = i < synth->operatorCount - 1
-                      ? op->config.rm * op->indexEnvelope * frequencies[i] : 0.0;
-        if (!isfinite(frequencies[i]) || !isfinite(deviations[i]))
-            return 0.0f;
-        if (i > 0 && !isfinite(frequencies[i] + deviations[i - 1]))
-            return 0.0f;
+    /* Bound the whole graph before advancing state. Each waveform is in [-1,1]. */
+    double frequencies[FM_MAX_OPERATORS], deviations[FM_MAX_OPERATORS];
+    for (int i=0;i<synth->operatorCount;++i) {
+        const FmOperator *op=&synth->operators[i];
+        frequencies[i]=baseFrequencyHz*op->config.ratio;
+        deviations[i]=synth->modulators[i] ? op->config.rm*op->indexEnvelope*frequencies[i] : 0;
+        if (!isfinite(frequencies[i]) || !isfinite(deviations[i])) return 0;
     }
-
-    float sample = 0.0f;
-    for (int i = 0; i < synth->operatorCount; ++i) {
-        FmOperator *op = &synth->operators[i];
-        double instantaneousHz = frequencies[i];
-        if (i > 0)
-            instantaneousHz += deviations[i - 1] * sample;
-        /* Each operator integrates signed frequency into its own phase.
-         * Its current output modulates the next operator in this sample. */
-        sample = oscillatorNextSample(&op->oscillator, instantaneousHz);
-        if (i < synth->operatorCount - 1)
-            advanceIndexEnvelope(op);
+    for (int i=0;i<synth->operatorCount;++i) {
+        double bound=frequencies[i]+frequencies[i]*synth->operators[i].config.feedback;
+        for (int j=0;j<i;++j) bound+=deviations[j]*synth->routing[j][i];
+        if (!isfinite(bound)) return 0;
     }
-    return sample;
+    double outputs[FM_MAX_OPERATORS], mixed=0;
+    for (int i=0;i<synth->operatorCount;++i) {
+        FmOperator *op=&synth->operators[i];
+        double hz=frequencies[i]+frequencies[i]*op->config.feedback*synth->previousOutputs[i]*op->indexEnvelope;
+        for (int j=0;j<i;++j) hz+=synth->routing[j][i]*deviations[j]*outputs[j];
+        outputs[i]=oscillatorNextSample(&op->oscillator,hz);
+        mixed+=synth->outputLevels[i]*outputs[i];
+        if (synth->modulators[i]) advanceIndexEnvelope(op);
+    }
+    for (int i=0;i<synth->operatorCount;++i) synth->previousOutputs[i]=outputs[i];
+    return (float)(mixed/synth->outputNormalization);
 }

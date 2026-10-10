@@ -12,12 +12,19 @@ typedef enum {
     FM_INDEX_ADSR
 } FmIndexMode;
 
+typedef enum {
+    FM_ALGORITHM_CHAIN = 0, FM_ALGORITHM_PAIRS, FM_ALGORITHM_FAN_IN,
+    FM_ALGORITHM_FAN_OUT, FM_ALGORITHM_ADDITIVE, FM_ALGORITHM_CUSTOM,
+    FM_ALGORITHM_COUNT
+} FmAlgorithm;
+const char *fmAlgorithmName(FmAlgorithm algorithm);
+
 typedef struct {
     Waveform waveform;
     double pulseWidth;      /* Pulse duty cycle, strictly between 0 and 1. */
     double vibratoRateHz;
     double vibratoDepthCents;
-    double rm;             /* Depth into next OP: deviation / nominal Hz. */
+    double rm;             /* Outgoing FM depth: deviation / nominal source Hz. */
     double ratio;          /* Operator's nominal Hz = base Hz * ratio. */
     FmIndexMode indexMode;
     double decayRate;      /* Exponential index decay rate, per second. */
@@ -25,12 +32,18 @@ typedef struct {
     int decayMs;
     int sustainPercent;
     int releaseMs;
+    double outputLevel; /* 0..1: audible carrier level in graph modes. */
+    double feedback;    /* 0..8: previous output times nominal Hz, frequency feedback. */
 } FmOperatorConfig;
 
 typedef struct {
-    int operatorCount; /* OP1 -> OP2 -> ... -> OPn (the output carrier). */
-    /* Ratio/waveform/pulse width apply to the carrier; its index is unused. */
+    int operatorCount; /* Active operators; routing is selected by algorithm. */
+    /* In legacy chain mode, only the last OP is audible; its index is unused
+     * unless feedback is enabled. Graph modes support multiple carriers. */
     FmOperatorConfig operators[FM_MAX_OPERATORS];
+    FmAlgorithm algorithm; /* Zero retains the original serial chain. */
+    double routing[FM_MAX_OPERATORS][FM_MAX_OPERATORS]; /* [source][destination], 0..1.
+        Custom mode only: source must be earlier than destination; feedback is separate. */
 } FmConfig;
 
 typedef enum {
@@ -57,6 +70,11 @@ typedef struct {
     int operatorCount;
     FmOperator operators[FM_MAX_OPERATORS];
     bool held;
+    FmAlgorithm algorithm;
+    double routing[FM_MAX_OPERATORS][FM_MAX_OPERATORS];
+    double outputLevels[FM_MAX_OPERATORS], previousOutputs[FM_MAX_OPERATORS];
+    bool modulators[FM_MAX_OPERATORS];
+    double outputNormalization;
 } FmSynth;
 
 FmConfig fmDefaultConfig(void);

@@ -1,6 +1,6 @@
 # Factory sound guide
 
-64 factory sounds are available in the preset dropdown. Choose a sound and play;
+72 factory sounds are available in the preset dropdown. Choose a sound and play;
 each includes its own layers, master ADSR, echo, and reverb. The first 13 retain
 the original names and positions. Subsequent sounds are grouped by family.
 
@@ -8,6 +8,38 @@ These are synthesized interpretations of instruments. FM ratios and modulation
 envelopes create their harmonics; noise adds breath, detuning adds movement,
 and independent layers add overtones. Echo times are in milliseconds and are
 not synchronized to MIDI tempo. The synth output is mono.
+
+## Routing refresh
+
+28 of the established sounds now use graph FM. Names and program numbers stay
+put, and their master ADSR, layers, detuning and effects keep the same settings.
+The intent is more detail in the attack and more movement in sustained pads,
+without making every sound brighter or louder. A saved user patch keeps its
+own settings; selecting a refreshed factory preset loads the new recipe.
+
+| Sounds | Change |
+| --- | --- |
+| Flute Bamboo, Flute Pan | A quiet extra harmonic fades quickly after the breath attack |
+| Reed Clarinet, Reed Oboe, Reed Bassoon | Two independently enveloped modulators feed the reed carrier |
+| Brass Mellow Horn, Brass Bright Section | A separate upper partial adds articulation to the swell |
+| Keys Velvet EP, Keys Tine EP, Keys Digital Grand, Keys Toy Piano | A short upper attack fades independently of the body |
+| Bell Tubular, Bell Singing Bowl, Bell Church | An additional inharmonic partial has its own decay |
+| Bass Rubber FM, Bass Picked Wire | A brief edge decays before the low body |
+| Lead Liquid, Lead Laser | An independent transient adds definition without increasing sustained FM depth |
+| Pluck Nylon, Pluck Steel, Pluck Kalimba, Pluck Marimba | A separate strike partial fades earlier than the main brightness envelope |
+| FX Metallic Rain | An extra inharmonic strike adds texture |
+| Pad Aurora, Pad Glass Ocean, Pad Choir Haze | One modulator feeds fundamental and quiet octave carriers in each first layer |
+| Bass Growl, FX Cosmic Transmission | The nested chain also feeds a small direct route to its carrier, with restrained self-feedback |
+
+The pure tones and gentler flutes keep their simple routing. More operators are
+useful when they shape a distinct part of the sound, rather than merely adding
+complexity. These changes are sound-design choices, not an anti-aliasing upgrade.
+
+Eight additional **Graph** sounds demonstrate parallel pairs (Tine Duo, Prism
+Bell), summed modulators (Hollow Reed), a shared modulator (Air Choir), custom
+routing and feedback (Feedback Bass, Glass Cascade, Orbit Texture), and additive
+carriers (Drawbar Organ). The SDL and Logic routing diagrams show the actual
+connections for each sound.
 
 ## Flutes and winds
 
@@ -70,7 +102,7 @@ with echo work well with gaps between notes.
 | Bass Rubber FM | Snappy modulation that rapidly settles into a low body |
 | Bass Electric Finger | Rounded fundamental and a decaying plucked edge |
 | Bass Picked Wire | Fast, bright strike with a quiet higher-ratio transient |
-| Bass Growl | Three-operator modulation chain plus a sine foundation |
+| Bass Growl | Three-operator graph with subtle feedback plus a sine foundation |
 | Bass Hollow Pulse | Pulse body supported by a lower sine layer |
 | Saw lead | Original saw, with a smoother release and restrained ambience |
 | Lead Liquid | Expressive FM attack, gentle vibrato, and echo |

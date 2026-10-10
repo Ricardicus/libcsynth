@@ -182,7 +182,8 @@ int synthConfigure(Synth *engine, const SynthConfig *config)
                     op->oscillator.noiseState = old->oscillator.noiseState;
                     op->oscillator.phase = old->oscillator.phase;
                     op->oscillator.vibratoPhase = old->oscillator.vibratoPhase;
-                    if (i < previous.operatorCount - 1 && i < part->generator.operatorCount - 1 &&
+                    part->generator.previousOutputs[i] = previous.previousOutputs[i];
+                    if (previous.modulators[i] && part->generator.modulators[i] &&
                         op->config.indexMode == old->config.indexMode) {
                         op->stage = old->stage;
                         op->stageStart = old->stageStart;

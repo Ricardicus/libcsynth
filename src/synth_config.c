@@ -7,7 +7,7 @@
 
 enum { ORIGINAL_PRESETS = 13 };
 _Static_assert(ORIGINAL_PRESETS + sizeof(factoryRecipes) / sizeof(factoryRecipes[0]) ==
-               SYNTH_PRESET_COUNT, "Factory preset count must match the bank");
+               64, "Factory preset count must match the bank");
 
 SynthConfig synthDefaultConfig(void)
 {
@@ -47,13 +47,65 @@ const char *synthPresetName(int index)
         "Soft organ", "Wide pad", "Brass", "Space wobble", "Flute"
     };
     if (index < 0 || index >= SYNTH_PRESET_COUNT) return "Custom";
+    static const char *graphNames[]={"Graph Tine Duo","Graph Prism Bell","Graph Hollow Reed","Graph Air Choir","Graph Feedback Bass","Graph Glass Cascade","Graph Drawbar Organ","Graph Orbit Texture"};
+    if (index>=64) return graphNames[index-64];
     return index < ORIGINAL_PRESETS ? names[index] : factoryRecipes[index - ORIGINAL_PRESETS].name;
 }
 
 SynthConfig synthPresetConfig(int index)
 {
     SynthConfig c = synthDefaultConfig();
-    if (index >= ORIGINAL_PRESETS && index < SYNTH_PRESET_COUNT) {
+    if (index>=64 && index<SYNTH_PRESET_COUNT) {
+        int recipe=index-64;
+        FmConfig *fm=&c.layers[0].fm;
+        fm->operatorCount=recipe==7 ? 8 : recipe==6 ? 6 : recipe==5 ? 5 : 4;
+        fm->algorithm=recipe==0 || recipe==1 ? FM_ALGORITHM_PAIRS : recipe==2 ? FM_ALGORITHM_FAN_IN :
+            recipe==3 ? FM_ALGORITHM_FAN_OUT : recipe==6 ? FM_ALGORITHM_ADDITIVE : FM_ALGORITHM_CUSTOM;
+        for (int i=0;i<fm->operatorCount;++i) {
+            FmOperatorConfig *op=&fm->operators[i];
+            op->ratio=1; op->rm=.6; op->outputLevel=0;
+            op->indexMode=FM_INDEX_ADSR; op->attackMs=5; op->decayMs=500; op->sustainPercent=25; op->releaseMs=250;
+        }
+        c.outputEnvelope=(SynthEnvelopeConfig){8,450,70,350}; c.effects.reverbMix=.12;
+        switch (recipe) {
+        case 0:
+            fm->operators[0].ratio=3; fm->operators[0].rm=1.5; fm->operators[0].sustainPercent=8;
+            fm->operators[1].outputLevel=1; fm->operators[2].ratio=7; fm->operators[2].rm=.3;
+            fm->operators[3].outputLevel=.45; fm->operators[3].ratio=2;
+            c.outputEnvelope=(SynthEnvelopeConfig){3,1200,35,450}; break;
+        case 1:
+            fm->operators[0].ratio=2.71; fm->operators[0].rm=1.4;
+            fm->operators[1].outputLevel=1; fm->operators[2].ratio=3.14;
+            fm->operators[3].ratio=1.5; fm->operators[3].outputLevel=.6;
+            c.outputEnvelope=(SynthEnvelopeConfig){1,1800,10,900}; c.effects.reverbMix=.25; break;
+        case 2:
+            fm->operators[0].ratio=2; fm->operators[0].rm=.25;
+            fm->operators[1].ratio=3; fm->operators[1].rm=.12;
+            fm->operators[2].ratio=5; fm->operators[2].rm=.05; fm->operators[3].outputLevel=1; break;
+        case 3:
+            fm->operators[0].ratio=.5; fm->operators[0].rm=.45;
+            for (int i=1;i<4;++i) { fm->operators[i].ratio=i==3 ? 2 : 1; fm->operators[i].outputLevel=i==3 ? .3 : 1; fm->operators[i].vibratoDepthCents=5*i; }
+            c.outputEnvelope=(SynthEnvelopeConfig){400,600,85,1000}; c.effects.reverbMix=.3; break;
+        case 4:
+            fm->routing[0][1]=1; fm->routing[1][3]=.5; fm->routing[2][3]=.3;
+            fm->operators[0].ratio=.5; fm->operators[0].feedback=1.25; fm->operators[0].rm=1.8;
+            fm->operators[2].ratio=2; fm->operators[3].outputLevel=1;
+            c.outputEnvelope=(SynthEnvelopeConfig){2,350,65,120}; c.filters.lowpassHz=3500; break;
+        case 5:
+            fm->routing[0][2]=.5; fm->routing[1][2]=1; fm->routing[2][3]=.7; fm->routing[2][4]=.35;
+            fm->operators[0].ratio=5.43; fm->operators[1].ratio=2.13;
+            fm->operators[3].outputLevel=1; fm->operators[4].ratio=2; fm->operators[4].outputLevel=.4;
+            c.outputEnvelope=(SynthEnvelopeConfig){2,1400,20,750}; c.effects.echoMix=.15; break;
+        case 6:
+            for (int i=0;i<6;++i) { fm->operators[i].ratio=i+1; fm->operators[i].outputLevel=1.0/(i+1); }
+            c.outputEnvelope=(SynthEnvelopeConfig){10,0,100,100}; c.effects.reverbMix=.08; break;
+        case 7:
+            for (int i=0;i<4;++i) { fm->routing[i][i+4]=.5; fm->operators[i].ratio=.5+i*.37; fm->operators[i].feedback=.12*i; fm->operators[i+4].ratio=1+i*.003; fm->operators[i+4].outputLevel=1; }
+            c.outputEnvelope=(SynthEnvelopeConfig){600,700,80,1200}; c.effects.echoMix=.2; c.effects.reverbMix=.3; break;
+        }
+        return c;
+    }
+    if (index >= ORIGINAL_PRESETS && index < 64) {
         const FactoryRecipe *recipe = &factoryRecipes[index - ORIGINAL_PRESETS];
         c.outputEnvelope = recipe->envelope;
         c.effects = recipe->effects;
@@ -63,8 +115,15 @@ SynthConfig synthPresetConfig(int index)
             c.layers[l].gain = source->gain;
             c.layers[l].detuneCents = source->detuneCents;
             c.layers[l].fm.operatorCount = source->fm.operatorCount;
-            for (int op = 0; op < source->fm.operatorCount; ++op)
+            c.layers[l].fm.algorithm = source->fm.algorithm;
+            for (int from=0;from<FM_MAX_OPERATORS;++from)
+                for (int to=0;to<FM_MAX_OPERATORS;++to)
+                    c.layers[l].fm.routing[from][to]=source->fm.routing[from][to];
+            for (int op = 0; op < source->fm.operatorCount; ++op) {
                 c.layers[l].fm.operators[op] = source->fm.operators[op];
+                if (source->fm.algorithm==FM_ALGORITHM_CHAIN)
+                    c.layers[l].fm.operators[op].outputLevel=1;
+            }
         }
         return c;
     }

@@ -52,7 +52,7 @@ int presetWrite(const char *path, const char *name, const SynthConfig *c, char *
     if (!allValid(c)) return fail(error, size, "Invalid synth settings.");
     FILE *f = fopen(path, "wx");
     if (!f) return fail(error, size, errno == EEXIST ? "That preset already exists." : "Cannot save preset: %s", strerror(errno));
-    fprintf(f, "SYNTH_PRESET 2\nname %s\n", name);
+    fprintf(f, "SYNTH_PRESET 3\nname %s\n", name);
     const SynthEnvelopeConfig *e = &c->outputEnvelope;
     fprintf(f, "master %d %d %d %d\n", e->attackMs, e->decayMs, e->sustainPercent, e->releaseMs);
     const SynthEffectsConfig *fx = &c->effects;
@@ -63,12 +63,18 @@ int presetWrite(const char *path, const char *name, const SynthConfig *c, char *
     for (int l = 0; l < SYNTH_MAX_LAYERS; ++l) {
         const SynthLayerConfig *layer = &c->layers[l];
         fprintf(f, "layer %.17g %.17g %d\n", layer->gain, layer->detuneCents, layer->fm.operatorCount);
+        fprintf(f,"algorithm %d\n",layer->fm.algorithm);
+        for (int i=0;i<FM_MAX_OPERATORS;++i) {
+            fprintf(f,"route");
+            for (int j=0;j<FM_MAX_OPERATORS;++j) fprintf(f," %.17g",layer->fm.routing[i][j]);
+            fprintf(f,"\n");
+        }
         for (int k = 0; k < FM_MAX_OPERATORS; ++k) {
             const FmOperatorConfig *op = &layer->fm.operators[k];
-            fprintf(f, "op %s %.17g %.17g %.17g %.17g %.17g %d %.17g %d %d %d %d\n",
+            fprintf(f, "op %s %.17g %.17g %.17g %.17g %.17g %d %.17g %d %d %d %d %.17g %.17g\n",
                     oscillatorWaveformName(op->waveform), op->pulseWidth, op->vibratoRateHz,
                     op->vibratoDepthCents, op->rm, op->ratio, op->indexMode, op->decayRate,
-                    op->attackMs, op->decayMs, op->sustainPercent, op->releaseMs);
+                    op->attackMs, op->decayMs, op->sustainPercent, op->releaseMs, op->outputLevel, op->feedback);
         }
     }
     bool broken = ferror(f) != 0;
@@ -108,6 +114,7 @@ int presetRead(const char *path, char *name, SynthConfig *config, char *error, s
     int version;
     if (!strcmp(title,"SYNTH_PRESET 1")) version = 1;
     else if (!strcmp(title,"SYNTH_PRESET 2")) version = 2;
+    else if (!strcmp(title,"SYNTH_PRESET 3")) version = 3;
     else goto invalid;
     if (!fgets(title, sizeof(title), f) || strncmp(title, "name ", 5)) goto invalid;
     title[strcspn(title, "\r\n")] = 0;
@@ -120,13 +127,22 @@ int presetRead(const char *path, char *name, SynthConfig *config, char *error, s
     if (!tag(f,"effects") || !readReal(f,&fx->echoMix) || !readReal(f,&fx->echoDelayMs) ||
         !readReal(f,&fx->echoFeedback) || !readReal(f,&fx->reverbMix) || !readReal(f,&fx->reverbRoom) ||
         !readReal(f,&fx->reverbDamping)) goto invalid;
-    if (version == 2 && (!tag(f,"filters") || !readReal(f,&c.filters.lowpassHz) ||
+    if (version >= 2 && (!tag(f,"filters") || !readReal(f,&c.filters.lowpassHz) ||
         !readReal(f,&c.filters.highpassHz))) goto invalid;
     if (!tag(f,"layers") || !readInt(f,&c.layerCount)) goto invalid;
     for (int l = 0; l < SYNTH_MAX_LAYERS; ++l) {
         SynthLayerConfig *layer = &c.layers[l];
         if (!tag(f,"layer") || !readReal(f,&layer->gain) || !readReal(f,&layer->detuneCents) ||
             !readInt(f,&layer->fm.operatorCount)) goto invalid;
+        if (version>=3) {
+            int algorithm;
+            if (!tag(f,"algorithm") || !readInt(f,&algorithm) || algorithm<0 || algorithm>=FM_ALGORITHM_COUNT) goto invalid;
+            layer->fm.algorithm=(FmAlgorithm)algorithm;
+            for (int i=0;i<FM_MAX_OPERATORS;++i) {
+                if (!tag(f,"route")) goto invalid;
+                for (int j=0;j<FM_MAX_OPERATORS;++j) if (!readReal(f,&layer->fm.routing[i][j])) goto invalid;
+            }
+        }
         for (int k = 0; k < FM_MAX_OPERATORS; ++k) {
             FmOperatorConfig *op = &layer->fm.operators[k];
             char wave[24]; int mode;
@@ -135,6 +151,7 @@ int presetRead(const char *path, char *name, SynthConfig *config, char *error, s
                 !readReal(f,&op->rm) || !readReal(f,&op->ratio) || !readInt(f,&mode) ||
                 !readReal(f,&op->decayRate) || !readInt(f,&op->attackMs) || !readInt(f,&op->decayMs) ||
                 !readInt(f,&op->sustainPercent) || !readInt(f,&op->releaseMs)) goto invalid;
+            if (version>=3 && (!readReal(f,&op->outputLevel) || !readReal(f,&op->feedback))) goto invalid;
             if (!oscillatorParseWaveform(wave, &op->waveform) || mode < FM_INDEX_SUSTAIN || mode > FM_INDEX_ADSR) goto invalid;
             op->indexMode = (FmIndexMode)mode;
         }
