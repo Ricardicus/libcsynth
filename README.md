@@ -385,11 +385,3 @@ each `op` row appends output level and feedback. Readers still accept v1/v2
 as legacy chains with output level 1 and feedback 0. Older library builds do
 not read v3, so rebuild clients when updating these public config structs.
 
-### Refreshed factory sounds
-
-28 established patches now use the graph routing and feedback features for
-independent attack harmonics, shared pad modulation, and a little extra texture.
-The bank still has 72 sounds with the same names and program numbers. See the
-[factory sound guide](presets/README.md#routing-refresh) for what changed.
-Factory `.synth` files and compiled presets carry the same settings, so SDL
-and the Logic plugin load the same sounds from this shared library.
